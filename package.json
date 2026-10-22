@@ -1,6 +1,6 @@
 {
   "name": "@webheaven/kit",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "React side of the product contract: the admin module (overview, usage, audit, users, update check)",
   "license": "Apache-2.0",
   "type": "module",
@@ -16,6 +16,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/BartKamminga/webheaven-kit.git"
+    "url": "git+https://github.com/webheaven-platform/webheaven-kit.git"
   }
 }
