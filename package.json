@@ -1,0 +1,21 @@
+{
+  "name": "@webheaven/kit",
+  "version": "0.1.0",
+  "description": "React side of the product contract: the admin module (overview, usage, audit, users, update check)",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    "./admin": "./web/src/admin/index.js",
+    "./admin.css": "./web/src/admin/admin.css"
+  },
+  "files": [
+    "web/src"
+  ],
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BartKamminga/webheaven-kit.git"
+  }
+}
