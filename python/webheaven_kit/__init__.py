@@ -5,5 +5,5 @@ from .contract import CONTRACT_VERSION, LEVELS, allows
 from .instance import Instance, InstanceStore
 from .link import LinkError, Linker
 
-__version__ = "0.2.0"
+from .version import KIT_VERSION as __version__  # noqa: E402
 __all__ = ["AdminProvider", "admin_router", "CONTRACT_VERSION", "LEVELS", "allows", "Instance", "InstanceStore", "LinkError", "Linker"]

@@ -21,6 +21,7 @@ class FakeHub:
         path = request.url.path
         body = json.loads(request.content or b"{}")
         self.calls.append((path, body, request.headers.get("authorization")))
+        self.ua = getattr(self, "ua", []) + [request.headers.get("user-agent", "")]
         if path == "/api/products/link-requests":
             return httpx.Response(200, json={"request_id": 7, "device_secret": "dev", "user_code": "7KQ-4MZ",
                                              "verification_url": "https://hub.test/admin/products/link?code=7KQ-4MZ",
@@ -62,6 +63,7 @@ def test_full_link_flow(tmp_path, hub):
     assert c.get("/api/admin/link").json()["mode"] == "standalone"
     started = c.post("/api/admin/link/start", json={"hub_url": "https://hub.test/", "name": "laptop"}).json()
     assert started["pending"]["user_code"] == "7KQ-4MZ" and "device_secret" not in json.dumps(started)
+    assert hub.ua[0].startswith("webheaven-kit/") and hub.ua[0].endswith("(demo 1.0.0)")
     assert hub.calls[0][1]["instance_id"] == store.instance.id and hub.calls[0][1]["admin_url"] is None
     assert c.post("/api/admin/link/poll").json()["status"] == "pending"
 

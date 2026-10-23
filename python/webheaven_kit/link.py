@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 import httpx
 
 from .instance import InstanceStore
+from .version import KIT_VERSION
 from .wirelog import WireLog
 
 HEARTBEAT_SECONDS = 15 * 60
@@ -44,7 +45,10 @@ class Linker:
         self.log = log or WireLog(store.dir)
 
     def _post(self, url: str, json: dict, token: str | None = None) -> httpx.Response:
-        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        # Own user agent: recognisable in the hub's logs, and generic Python agents get blocked by some CDNs
+        headers = {"User-Agent": f"webheaven-kit/{KIT_VERSION} ({self.product} {self.version})"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
         try:
             with self._client() as c:
                 r = c.post(url, json=json, headers=headers)
