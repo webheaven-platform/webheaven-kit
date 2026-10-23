@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "webheaven-kit"
-version = "0.1.1"
+version = "0.2.0"
 description = "Product contract for apps that run on their own and can link to a hub: admin API, instance, releases"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.11"
-dependencies = ["fastapi>=0.115"]
+dependencies = ["fastapi>=0.115", "httpx>=0.27"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "httpx"]

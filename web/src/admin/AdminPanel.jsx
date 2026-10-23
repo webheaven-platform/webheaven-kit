@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
+import LinkTab from "./LinkTab.jsx";
 import { Audit, Overview, Usage, Users } from "./sections.jsx";
 
-const LABELS = { overview: "Overview", usage: "Usage", audit: "Audit", users: "Users & roles" };
+const LABELS = { overview: "Overview", usage: "Usage", audit: "Audit", users: "Users & roles", link: "Link" };
 const VIEWS = { usage: Usage, audit: Audit, users: Users };
 
 async function defaultFetch(url) {
@@ -13,7 +14,7 @@ async function defaultFetch(url) {
 
 // `base`: where the admin API lives (for example "/api/admin"). A hub passes its own `fetchJson`
 // that proxies to the instance with the service token; the components stay the same.
-export default function AdminPanel({ base = "/api/admin", fetchJson = defaultFetch, extraTabs = [] }) {
+export default function AdminPanel({ base = "/api/admin", fetchJson = defaultFetch, extraTabs = [], defaultHub }) {
   const [core, setCore] = useState(null);
   const [tab, setTab] = useState("overview");
   const [data, setData] = useState({});
@@ -42,6 +43,7 @@ export default function AdminPanel({ base = "/api/admin", fetchJson = defaultFet
         {tabs.map(t => <button key={t.id} className={t.id === tab ? "wh-tab active" : "wh-tab"} onClick={() => setTab(t.id)}>{t.label}</button>)}
       </div>
       {tab === "overview" && <Overview health={core.health} info={core.info} />}
+      {tab === "link" && <LinkTab base={base} defaultHub={defaultHub} />}
       {View && (data[tab] ? <View data={data[tab]} /> : <p className="wh-muted">Loading…</p>)}
       {extra && extra.render()}
     </div>

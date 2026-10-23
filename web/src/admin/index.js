@@ -3,3 +3,4 @@
 export { default as AdminPanel } from "./AdminPanel.jsx";
 export { default as UpdateCheck } from "./UpdateCheck.jsx";
 export { compareVersions } from "./semver.js";
+export { default as TrafficLog } from "./TrafficLog.jsx";

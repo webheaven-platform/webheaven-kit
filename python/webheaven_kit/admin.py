@@ -8,6 +8,8 @@ from fastapi import APIRouter, HTTPException, Request
 
 from .contract import CONTRACT_VERSION, SECTION_LEVEL, allows
 from .instance import InstanceStore
+from .link import Linker
+from .link_api import link_router
 
 
 class AdminProvider:
@@ -41,20 +43,29 @@ def _always(_: Request) -> bool:
 
 
 def admin_router(provider: AdminProvider, store: InstanceStore, *, prefix: str = "/admin",
-                 local_access: Callable[[Request], bool] = _always) -> APIRouter:
+                 local_access: Callable[[Request], bool] = _always, linker: Linker | None = None,
+                 manage: str = "open", manage_password: str | None = None) -> APIRouter:
     """Router with the admin API. `local_access` is the product's own check for its own UI (level full);
-    a hub authenticates with its service token and gets the instance's visibility level."""
+    a hub authenticates with its service token and gets the instance's visibility level.
+    With a `linker` the local link endpoints are added (see link_api: `manage`, `manage_password`)."""
     router = APIRouter(prefix=prefix, tags=["admin"])
+    if linker:
+        router.include_router(link_router(linker, prefix="", local_access=local_access,
+                                          manage=manage, password=manage_password, admin_path=prefix))
 
-    def level_of(request: Request) -> str:
+    def caller(request: Request) -> tuple[str, str]:
+        """(who, level): the own UI ("local", full) or the hub ("hub", the instance's visibility)."""
         auth = request.headers.get("authorization", "")
         if auth.lower().startswith("bearer "):
             if store.verify_service_token(auth[7:].strip()):
-                return store.instance.visibility
+                return "hub", store.instance.visibility
             raise HTTPException(401, "invalid service token")
         if local_access(request):
-            return "full"
+            return "local", "full"
         raise HTTPException(401, "not authenticated")
+
+    def level_of(request: Request) -> str:
+        return caller(request)[1]
 
     def require(request: Request, section: str) -> None:
         if section != "overview" and section not in provider.features:
@@ -62,9 +73,10 @@ def admin_router(provider: AdminProvider, store: InstanceStore, *, prefix: str =
         if not allows(level_of(request), SECTION_LEVEL[section]):
             raise HTTPException(403, f"visibility level does not allow {section}")
 
-    def sections(level: str) -> list[str]:
-        return [s for s in ("overview", "usage", "audit", "users")
-                if (s == "overview" or s in provider.features) and allows(level, SECTION_LEVEL[s])]
+    def sections(who: str, level: str) -> list[str]:
+        out = [s for s in ("overview", "usage", "audit", "users")
+               if (s == "overview" or s in provider.features) and allows(level, SECTION_LEVEL[s])]
+        return out + ["link"] if linker and who == "local" else out   # the hub never manages the link
 
     def instance_part(full: bool) -> dict:
         inst = store.instance
@@ -73,37 +85,57 @@ def admin_router(provider: AdminProvider, store: InstanceStore, *, prefix: str =
             part.update(visibility=inst.visibility, created=inst.created)
         return part
 
+    log = linker.log if linker else None
+
+    def served(request: Request, build: Callable[[], dict], section: str | None = None) -> dict:
+        """Run an endpoint; when the hub calls (service token), record exactly what it got in the traffic log."""
+        from_hub = request.headers.get("authorization", "").lower().startswith("bearer ")
+        url = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+        headers = {"authorization": request.headers.get("authorization")}
+        try:
+            if section:
+                require(request, section)
+            result = build()
+        except HTTPException as e:
+            if from_hub and log:
+                log.record("from-hub", request.method, url, None, e.status_code, {"detail": e.detail}, headers)
+            raise
+        if from_hub and log:
+            log.record("from-hub", request.method, url, None, 200, result, headers)
+        return result
+
     @router.get("/health")
     def health(request: Request):
-        level_of(request)
-        checks = provider.checks()
-        status = "ok" if all(v == "ok" for v in checks.values()) else "degraded"
-        return {"contract": CONTRACT_VERSION, "product": provider.product, "version": provider.version,
-                "status": status, "checks": checks, "instance": instance_part(full=False)}
+        def build():
+            level_of(request)
+            checks = provider.checks()
+            status = "ok" if all(v == "ok" for v in checks.values()) else "degraded"
+            return {"contract": CONTRACT_VERSION, "product": provider.product, "version": provider.version,
+                    "status": status, "checks": checks, "instance": instance_part(full=False)}
+        return served(request, build)
 
     @router.get("/info")
     def info(request: Request):
-        level = level_of(request)
-        return {
-            "contract": CONTRACT_VERSION, "product": provider.product, "version": provider.version,
-            "instance": instance_part(full=True), "sections": sections(level),
-            "releases": {"feed": provider.releases_feed, "page": provider.releases_page},
-            "product_info": provider.info() if allows(level, "statistics") else None,
-        }
+        def build():
+            who, level = caller(request)
+            return {
+                "contract": CONTRACT_VERSION, "product": provider.product, "version": provider.version,
+                "instance": instance_part(full=True), "sections": sections(who, level),
+                "releases": {"feed": provider.releases_feed, "page": provider.releases_page},
+                "product_info": provider.info() if allows(level, "statistics") else None,
+            }
+        return served(request, build)
 
     @router.get("/usage")
     def usage(request: Request):
-        require(request, "usage")
-        return provider.usage()
+        return served(request, provider.usage, "usage")
 
     @router.get("/audit")
     def audit(request: Request, limit: int = 50):
-        require(request, "audit")
-        return {"entries": provider.audit(max(1, min(limit, 500)))}
+        return served(request, lambda: {"entries": provider.audit(max(1, min(limit, 500)))}, "audit")
 
     @router.get("/users")
     def users(request: Request):
-        require(request, "users")
-        return {"users": provider.users()}
+        return served(request, lambda: {"users": provider.users()}, "users")
 
     return router

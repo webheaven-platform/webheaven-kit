@@ -78,8 +78,59 @@ The admin overview has a **Check for updates** button: only on click, the **brow
 (no cookies, no referrer, nothing about the instance) and compares the versions itself. If the fetch fails it shows
 a link to the release page. A standalone instance therefore never contacts the hub itself.
 
-## Linking (adoption) — next version of the contract
+## Linking (adoption)
 
-Device-code style, always started by the instance: the instance asks the hub for a code, the owner approves it on
-the hub (owner, groups, visibility), the instance polls and stores the result in `link.json` (service token,
-OIDC client). Not part of v1 yet.
+Device-code style and **always started by the instance**, so it also works behind a firewall. The hub never
+initiates contact with an instance that did not link itself.
+
+```
+instance                                   hub                                       owner
+POST /api/products/link-requests  ───────► request + user code (15 min)
+show code + verification URL                                                     ──► opens URL, logged in as admin
+                                           shows product, name, version, base URL
+                                           owner picks visibility (default health)  ◄── approves / rejects
+POST /api/products/link-requests/poll ───► approved: credentials, delivered once
+store link.json, mode = linked
+POST /api/products/heartbeat (15 min) ───► last seen, version, status
+```
+
+### Hub endpoints (instance-facing, no user login)
+
+| Method + path | Auth | Body → result |
+|---|---|---|
+| `POST /api/products/link-requests` | none (rate limited) | `{product, instance_id, name, version, admin_url?}` → `{request_id, device_secret, user_code, verification_url, expires_in, interval}` |
+| `POST /api/products/link-requests/poll` | `device_secret` in body | `{request_id, device_secret}` → `{status: pending\|approved\|rejected\|expired, link?}` |
+| `POST /api/products/heartbeat` | `Bearer <instance key>` | `{version, status, visibility}` → `200`; `401` = the hub no longer knows this instance |
+| `POST /api/products/unlink` | `Bearer <instance key>` | → `204` |
+
+`link` (only once, on the first poll after approval): `{hub_url, instance_key, service_token, visibility}`.
+
+### Credentials
+
+- **Instance key**: the instance authenticates to the hub (heartbeat, unlink). The hub keeps only a hash.
+- **Service token**: the hub authenticates to the instance's admin API. The instance keeps only a hash
+  (`service_token_sha256` in `link.json`); the hub keeps it encrypted, because it has to send it.
+
+### Instance side
+
+- `link.json`: `{hub_url, instance_key, service_token_sha256, linked_at}`; `instance.json` gets `mode: linked` and the
+  visibility chosen at approval. The owner can change the visibility on the instance afterwards.
+- A heartbeat answered with `401` means the hub unlinked the instance: it deletes `link.json` and goes back to standalone.
+- `admin_url` (the full URL of the admin API, e.g. `http://host:8484/api/admin`) is optional. When set, the hub
+  reads the admin API there (only the fixed admin paths); when not set (a laptop), the hub only knows what the
+  heartbeats tell it.
+
+### Managing the link on the instance
+
+The admin API gets these local-only endpoints (never callable with the service token):
+
+| Method + path | Body → result |
+|---|---|
+| `GET /link` | `{mode, manage: open\|password\|disabled, hub_url?, linked_at?, visibility, pending?: {user_code, verification_url, expires_at}}` |
+| `POST /link/start` | `{hub_url, name, base_url?}` → pending |
+| `POST /link/poll` | → `{status}` |
+| `POST /link/unlink` | → standalone |
+| `POST /visibility` | `{level}` |
+
+`manage` tells the UI who may change the link: `open` (local tool), `password` (header `X-Admin-Password`, for
+example a product in server mode without accounts) or `disabled`.

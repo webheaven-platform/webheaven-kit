@@ -12,8 +12,8 @@ overview and updates. Open source (Apache-2.0).
 Not on PyPI/npm yet; install a tagged version from git:
 
 ```
-pip install "webheaven-kit @ git+https://github.com/webheaven-platform/webheaven-kit@v0.1.1#subdirectory=python"
-npm install "@webheaven/kit@github:webheaven-platform/webheaven-kit#v0.1.1"
+pip install "webheaven-kit @ git+https://github.com/webheaven-platform/webheaven-kit@v0.2.0#subdirectory=python"
+npm install "@webheaven/kit@github:webheaven-platform/webheaven-kit#v0.2.0"
 ```
 
 With Vite, add `resolve: { dedupe: ["react", "react-dom"] }` when you link the kit locally (`file:`), so the app
@@ -31,5 +31,5 @@ to the instance with the service token.
 
 ## Status
 
-v0.1: instance, visibility levels, admin API (health, info, usage, audit, users), admin module, update check.
-Next: linking (adoption) and OIDC login.
+v0.2: instance, visibility levels, admin API (health, info, usage, audit, users), admin module, update check, linking (adoption) with a hub.
+Next: OIDC login via the hub.

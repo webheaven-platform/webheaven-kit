@@ -32,3 +32,14 @@
 .wh-table { width: 100%; border-collapse: collapse; }
 .wh-table th, .wh-table td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--wh-border); vertical-align: top; }
 .wh-table th { color: var(--wh-muted); font-weight: 500; }
+.wh-form { display: flex; flex-direction: column; gap: 0.6rem; max-width: 34rem; }
+.wh-field { display: flex; flex-direction: column; gap: 0.25rem; color: var(--wh-muted); font-size: 0.9em; }
+.wh-field input, .wh-field select { font: inherit; color: inherit; background: transparent; border: 1px solid var(--wh-border); border-radius: 6px; padding: 0.35rem 0.5rem; }
+.wh-field select option { color: #000; }
+.wh-row { display: flex; align-items: center; gap: 0.75rem; }
+.wh-h { margin: 0; }
+.wh-traffic { border: 1px solid var(--wh-border); border-radius: 8px; padding: 0.4rem 0.6rem; }
+.wh-traffic summary { cursor: pointer; display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+.wh-dir { font-weight: 600; min-width: 5.5rem; }
+.wh-pre { margin: 0.2rem 0 0.6rem; padding: 0.5rem; border: 1px solid var(--wh-border); border-radius: 6px; overflow: auto; max-height: 20rem; font-size: 0.85em; white-space: pre-wrap; word-break: break-all; }
+.wh-section > .wh-btn, .wh-form > .wh-btn { align-self: flex-start; }

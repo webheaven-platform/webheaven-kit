@@ -63,11 +63,49 @@ class InstanceStore:
         self.instance.visibility = level
         self.save()
 
+    # Small JSON files next to instance.json; in memory without a data directory.
+    def _read(self, name: str) -> dict | None:
+        if not self.dir:
+            return self._memory.get(name)
+        path = self.dir / name
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+    def _write(self, name: str, data: dict | None) -> None:
+        if not self.dir:
+            self._memory[name] = data
+            return
+        path = self.dir / name
+        if data is None:
+            path.unlink(missing_ok=True)
+        else:
+            _write_json(path, data)
+
+    @property
+    def _memory(self) -> dict:
+        if not hasattr(self, "_mem"):
+            self._mem = {}
+        return self._mem
+
     def link(self) -> dict | None:
-        path = self._path("link.json")
-        if self.instance.mode != "linked" or not path or not path.exists():
-            return None
-        return json.loads(path.read_text(encoding="utf-8"))
+        return self._read("link.json") if self.instance.mode == "linked" else None
+
+    def set_link(self, link: dict, visibility: str) -> None:
+        """Store the credentials from the hub and switch to linked."""
+        self._write("link.json", link)
+        self.instance.mode = "linked"
+        self.set_visibility(visibility)   # also saves instance.json
+
+    def clear_link(self) -> None:
+        """Back to standalone: forget the hub."""
+        self._write("link.json", None)
+        self.instance.mode = "standalone"
+        self.save()
+
+    def pending(self) -> dict | None:
+        return self._read("link-pending.json")
+
+    def set_pending(self, pending: dict | None) -> None:
+        self._write("link-pending.json", pending)
 
     def verify_service_token(self, token: str) -> bool:
         """True when the token is the hub's service token. A standalone instance accepts no token at all."""
