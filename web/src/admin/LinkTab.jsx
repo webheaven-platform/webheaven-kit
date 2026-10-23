@@ -23,6 +23,7 @@ export default function LinkTab({ base, defaultHub = "https://webheaven.nl" }) {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [tick, setTick] = useState(0);
+  const [confirmUnlink, setConfirmUnlink] = useState(false);
   const loadTraffic = useCallback(() => call(`${base}/link/traffic`), [base]);
 
   const act = useCallback(async (path, method, body) => {
@@ -61,8 +62,20 @@ export default function LinkTab({ base, defaultHub = "https://webheaven.nl" }) {
             </select>
           </label>
           {pw}
-          <button className="wh-btn" disabled={busy || state.manage === "disabled"}
-            onClick={() => confirm("Unlink this instance from the hub?") && act("link/unlink", "POST")}>Unlink</button>
+          {/* Confirm in place, no browser popup: the kit runs inside other apps and does not rely on their modals. */}
+          {!confirmUnlink ? (
+            <button className="wh-btn" disabled={busy || state.manage === "disabled"} onClick={() => setConfirmUnlink(true)}>Unlink</button>
+          ) : (
+            <div className="wh-confirm" role="alertdialog" aria-label="Unlink from the hub">
+              <p><b>Unlink from {state.hub_url}?</b> The hub can no longer read this instance and the heartbeat stops.
+                This instance goes back to standalone; you can link again later.</p>
+              <div className="wh-row">
+                <button className="wh-btn wh-btn-danger" disabled={busy} autoFocus
+                  onClick={() => { setConfirmUnlink(false); act("link/unlink", "POST"); }}>Unlink</button>
+                <button className="wh-btn" onClick={() => setConfirmUnlink(false)}>Keep linked</button>
+              </div>
+            </div>
+          )}
         </>
       )}
 

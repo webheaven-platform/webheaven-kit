@@ -43,3 +43,6 @@
 .wh-dir { font-weight: 600; min-width: 5.5rem; }
 .wh-pre { margin: 0.2rem 0 0.6rem; padding: 0.5rem; border: 1px solid var(--wh-border); border-radius: 6px; overflow: auto; max-height: 20rem; font-size: 0.85em; white-space: pre-wrap; word-break: break-all; }
 .wh-section > .wh-btn, .wh-form > .wh-btn { align-self: flex-start; }
+.wh-confirm { border: 1px solid var(--wh-err); border-radius: 8px; padding: 0.6rem 0.8rem; display: flex; flex-direction: column; gap: 0.5rem; max-width: 40rem; }
+.wh-confirm p { margin: 0; }
+.wh-btn-danger { background: var(--wh-err); border-color: var(--wh-err); color: #fff; font-weight: 600; }

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "webheaven-kit"
-version = "0.2.1"
+version = "0.2.2"
 description = "Product contract for apps that run on their own and can link to a hub: admin API, instance, releases"
 readme = "README.md"
 license = "Apache-2.0"

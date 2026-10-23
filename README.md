@@ -12,8 +12,8 @@ overview and updates. Open source (Apache-2.0).
 Not on PyPI/npm yet; install a tagged version from git:
 
 ```
-pip install "webheaven-kit @ git+https://github.com/webheaven-platform/webheaven-kit@v0.2.1#subdirectory=python"
-npm install "@webheaven/kit@github:webheaven-platform/webheaven-kit#v0.2.1"
+pip install "webheaven-kit @ git+https://github.com/webheaven-platform/webheaven-kit@v0.2.2#subdirectory=python"
+npm install "@webheaven/kit@github:webheaven-platform/webheaven-kit#v0.2.2"
 ```
 
 With Vite, add `resolve: { dedupe: ["react", "react-dom"] }` when you link the kit locally (`file:`), so the app
