@@ -70,7 +70,11 @@ A product publishes a **release feed**: public JSON, anonymous, cacheable.
 }
 ```
 
-Newest first. The admin overview has a **Check for updates** button: only on click, the **browser** fetches the feed
+Newest first, no drafts or pre-releases. `security` is true when the release notes have a
+`## Security` heading (that is how a hub derives it from GitHub Releases). Also offered as RSS (`…/rss`).
+The feed is served with `Access-Control-Allow-Origin: *` and without cookies.
+
+The admin overview has a **Check for updates** button: only on click, the **browser** fetches the feed
 (no cookies, no referrer, nothing about the instance) and compares the versions itself. If the fetch fails it shows
 a link to the release page. A standalone instance therefore never contacts the hub itself.
 
