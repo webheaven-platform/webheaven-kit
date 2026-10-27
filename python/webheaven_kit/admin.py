@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from .contract import CONTRACT_VERSION, SECTION_LEVEL, allows
 from .instance import InstanceStore
+from .backup import Backupper  # noqa: F401 - type in admin_router
 from .link import Linker
 from .link_api import link_router
 
@@ -44,14 +45,16 @@ def _always(_: Request) -> bool:
 
 def admin_router(provider: AdminProvider, store: InstanceStore, *, prefix: str = "/admin",
                  local_access: Callable[[Request], bool] = _always, linker: Linker | None = None,
-                 manage: str = "open", manage_password: str | None = None) -> APIRouter:
+                 manage: str = "open", manage_password: str | None = None,
+                 backupper: "Backupper | None" = None) -> APIRouter:
     """Router with the admin API. `local_access` is the product's own check for its own UI (level full);
     a hub authenticates with its service token and gets the instance's visibility level.
-    With a `linker` the local link endpoints are added (see link_api: `manage`, `manage_password`)."""
+    With a `linker` the local link endpoints are added (see link_api: `manage`, `manage_password`), with a
+    `backupper` also the online-backup endpoints."""
     router = APIRouter(prefix=prefix, tags=["admin"])
     if linker:
-        router.include_router(link_router(linker, prefix="", local_access=local_access,
-                                          manage=manage, password=manage_password, admin_path=prefix))
+        router.include_router(link_router(linker, prefix="", local_access=local_access, manage=manage,
+                                          password=manage_password, admin_path=prefix, backupper=backupper))
 
     def caller(request: Request) -> tuple[str, str]:
         """(who, level): the own UI ("local", full) or the hub ("hub", the instance's visibility)."""

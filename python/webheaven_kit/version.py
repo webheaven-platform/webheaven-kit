@@ -1,1 +1,1 @@
-KIT_VERSION = "0.3.0"
+KIT_VERSION = "0.4.0"

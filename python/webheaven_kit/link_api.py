@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from .contract import LEVELS
+from .backup import Backupper
 from .link import LinkError, Linker, clean_catalog
 
 MANAGE = ("open", "password", "disabled")
@@ -32,7 +33,8 @@ class CatalogBody(BaseModel):
 
 
 def link_router(linker: Linker, *, prefix: str, local_access: Callable[[Request], bool],
-                manage: str = "open", password: str | None = None, admin_path: str = "") -> APIRouter:
+                manage: str = "open", password: str | None = None, admin_path: str = "",
+                backupper: Backupper | None = None) -> APIRouter:
     if manage not in MANAGE:
         raise ValueError(f"manage must be one of {MANAGE}")
     if manage == "password" and not password:
@@ -116,5 +118,34 @@ def link_router(linker: Linker, *, prefix: str, local_access: Callable[[Request]
         if not linker.catalog:
             raise HTTPException(404, "this product has no catalog")
         return {"enabled": linker.store.instance.catalog, "items": clean_catalog(linker.catalog())}
+
+    if backupper is None:
+        return router
+
+    @router.get("/backup")
+    def backup_state(request: Request):
+        require_local(request)
+        return backupper.state()
+
+    @router.post("/backup/enable")
+    def backup_enable(request: Request):
+        """Turn online backup on. Returns the recovery code: store it in a password manager, the hub never has it."""
+        require_manage(request)
+        code = backupper.enable()
+        return {**backupper.state(), "recovery_code": code}
+
+    @router.post("/backup/disable")
+    def backup_disable(request: Request):
+        require_manage(request)
+        backupper.disable()
+        return backupper.state()
+
+    @router.post("/backup/run")
+    def backup_run(request: Request):
+        """Start a backup now (in the background); GET /backup shows the result."""
+        require_manage(request)
+        if not backupper.state()["enabled"]:
+            raise HTTPException(409, "online backup is off on this installation")
+        return {"started": backupper.run_in_background()}
 
     return router

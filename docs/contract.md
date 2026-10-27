@@ -156,3 +156,42 @@ is in an item, and never puts content in it.
 - **Who decides**: the instance (`instance.json` → `catalog`, default on for products that offer one, `POST /catalog`
   to change it) and the hub owner (on or off at approval, can be switched off later). Both must allow it.
 - Unlinking deletes the catalog on the hub.
+
+## Backup (optional, kit 0.4)
+
+A linked instance can keep an **encrypted backup on the hub**. The hub stores blobs it cannot read.
+
+- **Key and recovery code**: the instance makes a random 256-bit key (`backup-key.json` in the data directory) and shows
+  it once as a recovery code (base32, groups of four). The hub never sees it; without it a backup cannot be restored.
+- **Blobs**: one per file, AES-256-GCM with a random nonce and the blob id as associated data. Blob id =
+  HMAC-SHA256(key, content): unchanged files are not sent again and the id reveals nothing to the hub.
+- **Manifest**: the list of paths and their blobs, encrypted as a blob too. The hub only learns the blob ids per backup,
+  so it knows which blobs it may delete when it drops an old backup.
+- **Who decides**: the instance (`POST /backup/enable`, off by default) and the hub owner (off by default, per
+  installation). Both must allow it; the hub answers `403` otherwise and `413` when the quota is full.
+- **Schedule**: daily while enabled, plus `POST /backup/run`.
+
+### Hub endpoints (instance-facing, `Bearer <instance key>`)
+
+| Method + path | Body → result |
+|---|---|
+| `POST /api/products/backups/check` | `{blobs: [id]}` → `{missing: [id]}` |
+| `PUT /api/products/backups/blobs/{id}` | encrypted bytes → `204` |
+| `POST /api/products/backups` | `{manifest, blobs: [id], files, size}` → `{id}` |
+
+The hub keeps backups per its own schedule (for example 7 daily and 4 weekly) and deletes blobs no remaining backup uses.
+
+### Restore
+
+The owner downloads a backup from the hub as a **bundle** (zip: `backup.json` with the manifest id, plus
+`blobs/<id>` for every blob of that backup) and restores it anywhere with the recovery code
+(`webheaven_kit.restore_bundle`), without a link to the hub: every file is checked against its blob id.
+
+### Local endpoints (admin API, never with the service token)
+
+| Method + path | Body → result |
+|---|---|
+| `GET /backup` | `{enabled, has_key, last}` |
+| `POST /backup/enable` | → `{…, recovery_code}` |
+| `POST /backup/disable` | → state |
+| `POST /backup/run` | → `{started}` |
