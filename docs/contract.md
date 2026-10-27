@@ -100,7 +100,8 @@ POST /api/products/heartbeat (15 min) ───► last seen, version, status
 |---|---|---|
 | `POST /api/products/link-requests` | none (rate limited) | `{product, instance_id, name, version, admin_url?}` → `{request_id, device_secret, user_code, verification_url, expires_in, interval}` |
 | `POST /api/products/link-requests/poll` | `device_secret` in body | `{request_id, device_secret}` → `{status: pending\|approved\|rejected\|expired, link?}` |
-| `POST /api/products/heartbeat` | `Bearer <instance key>` | `{version, status, visibility}` → `200`; `401` = the hub no longer knows this instance |
+| `POST /api/products/heartbeat` | `Bearer <instance key>` | `{version, status, visibility, catalog_hash?}` → `200` (`{catalog: "send"\|"ok"}` for products with a catalog); `401` = the hub no longer knows this instance |
+| `POST /api/products/catalog` | `Bearer <instance key>` | `{hash, items}` → `204` (see "Catalog") |
 | `POST /api/products/unlink` | `Bearer <instance key>` | → `204` |
 
 `link` (only once, on the first poll after approval): `{hub_url, instance_key, service_token, visibility}`.
@@ -131,6 +132,27 @@ The admin API gets these local-only endpoints (never callable with the service t
 | `POST /link/poll` | → `{status}` |
 | `POST /link/unlink` | → standalone |
 | `POST /visibility` | `{level}` |
+| `GET /catalog` | → `{enabled, items}`: exactly what the hub would get (only for products with a catalog) |
+| `POST /catalog` | `{enabled}` → share the catalog or stop sharing it |
 
 `manage` tells the UI who may change the link: `open` (local tool), `password` (header `X-Admin-Password`, for
 example a product in server mode without accounts) or `disabled`.
+
+## Catalog (optional, kit 0.3)
+
+A product can share a **catalog** with the hub: a list of its main items (for example the dossiers of a
+case-management app) so the owner gets one overview across instances. It is metadata only: the product decides what
+is in an item, and never puts content in it.
+
+- **Pushed by the instance**, never read by the hub, so it also works for an instance the hub cannot reach (a laptop).
+- Every heartbeat carries `catalog_hash` (sha256 of the canonical JSON of the items). The hub answers
+  `{"catalog": "send"}` when it has another hash and the owner allowed the catalog; the instance then posts the items.
+  An unchanged catalog costs one hash per heartbeat.
+- `catalog_hash: null` means the instance stopped sharing: the hub deletes what it has. A heartbeat without the field
+  (older kit, or the catalog could not be built this time) leaves the hub's copy as it is.
+- **Item**: `{id, title, ...}`. `id` and `title` are required (title at most 200 characters); everything else is
+  product-defined, for example `group`, `status`, `updated`, `counts: {name: number}`, `flags: {name: bool}`.
+  At most 2000 items.
+- **Who decides**: the instance (`instance.json` → `catalog`, default on for products that offer one, `POST /catalog`
+  to change it) and the hub owner (on or off at approval, can be switched off later). Both must allow it.
+- Unlinking deletes the catalog on the hub.

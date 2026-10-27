@@ -22,6 +22,7 @@ class Instance:
     created: str
     mode: str = "standalone"
     visibility: str = "health"
+    catalog: bool = True   # share the catalog with the hub (only for products that offer one, see Linker)
 
 
 def _write_json(path: Path, data: dict) -> None:
@@ -46,7 +47,7 @@ class InstanceStore:
         path = self._path("instance.json")
         if path and path.exists():
             data = json.loads(path.read_text(encoding="utf-8"))
-            return Instance(**{k: data[k] for k in ("id", "created", "mode", "visibility") if k in data})
+            return Instance(**{k: data[k] for k in ("id", "created", "mode", "visibility", "catalog") if k in data})
         inst = Instance(id=uuid.uuid4().hex, created=datetime.now(timezone.utc).isoformat(timespec="seconds"))
         if path:
             self.dir.mkdir(parents=True, exist_ok=True)
@@ -61,6 +62,10 @@ class InstanceStore:
         if level not in LEVELS:
             raise ValueError(f"unknown visibility level: {level}")
         self.instance.visibility = level
+        self.save()
+
+    def set_catalog(self, enabled: bool) -> None:
+        self.instance.catalog = bool(enabled)
         self.save()
 
     # Small JSON files next to instance.json; in memory without a data directory.

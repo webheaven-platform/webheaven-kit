@@ -34,7 +34,16 @@ class FakeHub:
                                "visibility": "statistics"}
             return httpx.Response(200, json=out)
         if path == "/api/products/heartbeat":
-            return httpx.Response(200 if self.known and request.headers["authorization"] == "Bearer ik" else 401)
+            if not (self.known and request.headers["authorization"] == "Bearer ik"):
+                return httpx.Response(401)
+            wants = getattr(self, "catalog_enabled", False) and body.get("catalog_hash") != getattr(self, "have", None)
+            if "catalog_hash" in body and body["catalog_hash"] is None:
+                self.have = None   # not shared any more
+            return httpx.Response(200, json={"catalog": "send" if wants and body.get("catalog_hash") else "ok"})
+        if path == "/api/products/catalog":
+            self.have = body["hash"]
+            self.items = body["items"]
+            return httpx.Response(204)
         if path == "/api/products/unlink":
             return httpx.Response(204)
         return httpx.Response(404)
@@ -91,6 +100,62 @@ def test_heartbeat_and_unlinked_by_the_hub(tmp_path, hub):
     hub.known = False
     assert linker.heartbeat() is False
     assert store.instance.mode == "standalone" and not (tmp_path / "link.json").exists()
+
+
+def test_catalog_goes_along_with_the_heartbeat_only_when_changed(tmp_path, hub):
+    store = InstanceStore(tmp_path)
+    items = [{"id": 1, "title": "LCMS", "updated": "2026-10-27", "counts": {"pieces": 3}}]
+    linker = Linker(store, "demo", "1.0.0", catalog=lambda: items,
+                    client=lambda: httpx.Client(transport=httpx.MockTransport(hub.handler)))
+    store.set_link({"hub_url": "https://hub.test", "instance_key": "ik", "service_token_sha256": "x"}, "health")
+    hub.catalog_enabled = True
+
+    linker.heartbeat()
+    assert [c[0] for c in hub.calls] == ["/api/products/heartbeat", "/api/products/catalog"]
+    assert hub.items == [{"id": "1", "title": "LCMS", "updated": "2026-10-27", "counts": {"pieces": 3}}]
+    linker.heartbeat()                                   # unchanged: only the heartbeat
+    assert [c[0] for c in hub.calls][-1] == "/api/products/heartbeat" and len(hub.calls) == 3
+
+    items.append({"id": "2", "title": "SOC"})
+    linker.heartbeat()                                   # changed: sent again
+    assert len(hub.items) == 2
+
+    store.set_catalog(False)                             # the owner stops sharing
+    linker.heartbeat()
+    assert hub.calls[-1][1]["catalog_hash"] is None and hub.have is None
+    assert linker.state()["catalog"] is False
+
+
+def test_a_broken_catalog_never_stops_the_heartbeat(tmp_path, hub):
+    store = InstanceStore(tmp_path)
+
+    def broken():
+        raise RuntimeError("database locked")
+    linker = Linker(store, "demo", "1.0.0", catalog=broken,
+                    client=lambda: httpx.Client(transport=httpx.MockTransport(hub.handler)))
+    store.set_link({"hub_url": "https://hub.test", "instance_key": "ik", "service_token_sha256": "x"}, "health")
+    assert linker.heartbeat() is True
+    assert "catalog_hash" not in hub.calls[-1][1]        # the hub keeps what it had
+
+
+def test_catalog_can_be_switched_and_previewed_locally(tmp_path, hub):
+    store = InstanceStore(tmp_path)
+    linker = Linker(store, "demo", "1.0.0", catalog=lambda: [{"id": "a", "title": "x" * 300}],
+                    client=lambda: httpx.Client(transport=httpx.MockTransport(hub.handler)))
+    app = FastAPI()
+    app.include_router(admin_router(Demo(), store, prefix="/api/admin", linker=linker))
+    c = TestClient(app)
+    preview = c.get("/api/admin/catalog").json()
+    assert preview["enabled"] is True and len(preview["items"][0]["title"]) == 200
+    assert c.post("/api/admin/catalog", json={"enabled": False}).json()["catalog"] is False
+    assert c.post("/api/admin/catalog", json={"enabled": True}, headers={"Authorization": "Bearer st"}).status_code == 403
+    assert InstanceStore(tmp_path).instance.catalog is False   # kept in instance.json
+
+
+def test_products_without_a_catalog_keep_the_v02_heartbeat(tmp_path, hub):
+    _, linker, c = make(tmp_path, hub)
+    assert c.get("/api/admin/catalog").status_code == 404
+    assert "catalog" not in linker.state()
 
 
 def test_unlink_works_even_if_the_hub_is_down(tmp_path):

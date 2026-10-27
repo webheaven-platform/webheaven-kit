@@ -4,6 +4,7 @@ the owner approved it on the hub, store the credentials, then send a heartbeat e
 from __future__ import annotations
 
 import hashlib
+import json
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -17,6 +18,22 @@ from .version import KIT_VERSION
 from .wirelog import WireLog
 
 HEARTBEAT_SECONDS = 15 * 60
+MAX_CATALOG_ITEMS = 2000
+
+
+def catalog_hash(items: list[dict]) -> str:
+    """Stable hash of the catalog: the hub asks for the items only when it differs from what it has."""
+    return hashlib.sha256(json.dumps(items, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
+
+
+def clean_catalog(items: list[dict]) -> list[dict]:
+    """Each item needs an id and a title (contract: "Catalog"); at most MAX_CATALOG_ITEMS."""
+    out = []
+    for item in items[:MAX_CATALOG_ITEMS]:
+        if not isinstance(item, dict) or not item.get("id") or not item.get("title"):
+            raise ValueError("every catalog item needs an id and a title")
+        out.append({**item, "id": str(item["id"]), "title": str(item["title"])[:200]})
+    return out
 
 
 class LinkError(Exception):
@@ -38,8 +55,12 @@ def clean_hub_url(url: str) -> str:
 class Linker:
     def __init__(self, store: InstanceStore, product: str, version: str,
                  status: Callable[[], str] = lambda: "ok",
-                 client: Callable[[], httpx.Client] | None = None, log: WireLog | None = None):
+                 client: Callable[[], httpx.Client] | None = None, log: WireLog | None = None,
+                 catalog: Callable[[], list[dict]] | None = None):
+        """catalog: what this product shares with the hub when the owner allows it (contract: "Catalog");
+        None = this product has no catalog and the heartbeat stays as in v0.2."""
         self.store, self.product, self.version, self.status = store, product, version, status
+        self.catalog = catalog
         self._client = client or (lambda: httpx.Client(timeout=10.0))
         self._thread: threading.Thread | None = None
         self.log = log or WireLog(store.dir)
@@ -65,6 +86,8 @@ class Linker:
     def state(self) -> dict:
         inst, link, pending = self.store.instance, self.store.link(), self.store.pending()
         out = {"mode": inst.mode, "visibility": inst.visibility}
+        if self.catalog:
+            out["catalog"] = inst.catalog
         if link:
             out.update(hub_url=link["hub_url"], linked_at=link.get("linked_at"))
         if pending:
@@ -124,16 +147,38 @@ class Linker:
         link = self.store.link()
         if not link:
             return False
+        body = {"version": self.version, "status": self.status(), "visibility": self.store.instance.visibility}
+        items = None
+        if self.catalog:
+            try:
+                # None = not shared (any more): the hub drops what it has
+                items = clean_catalog(self.catalog()) if self.store.instance.catalog else None
+                body["catalog_hash"] = catalog_hash(items) if items is not None else None
+            except Exception as e:  # noqa: BLE001 - a broken catalog never stops the heartbeat
+                items = None   # no catalog_hash this time: the hub keeps what it has
+                self.log.record("to-hub", "CATALOG", "", None, None, {"error": str(e)}, {})
         try:
-            r = self._post(f"{link['hub_url']}/api/products/heartbeat", {
-                "version": self.version, "status": self.status(), "visibility": self.store.instance.visibility,
-            }, token=link["instance_key"])
+            r = self._post(f"{link['hub_url']}/api/products/heartbeat", body, token=link["instance_key"])
         except LinkError:
             return True   # hub unreachable: stay linked, try again later
         if r.status_code == 401:
             self.store.clear_link()
             return False
+        if items is not None and r.status_code == 200 and self._hub_wants_catalog(r):
+            try:
+                self._post(f"{link['hub_url']}/api/products/catalog",
+                           {"hash": body["catalog_hash"], "items": items}, token=link["instance_key"])
+            except LinkError:
+                pass   # next heartbeat tries again
         return True
+
+    @staticmethod
+    def _hub_wants_catalog(r: httpx.Response) -> bool:
+        """The hub answers {"catalog": "send"} when it has another hash and the owner allowed the catalog."""
+        try:
+            return (r.json() or {}).get("catalog") == "send"
+        except ValueError:
+            return False
 
     def unlink(self) -> None:
         link = self.store.link()

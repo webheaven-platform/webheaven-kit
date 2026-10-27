@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from .contract import LEVELS
-from .link import LinkError, Linker
+from .link import LinkError, Linker, clean_catalog
 
 MANAGE = ("open", "password", "disabled")
 
@@ -25,6 +25,10 @@ class StartBody(BaseModel):
 
 class VisibilityBody(BaseModel):
     level: str
+
+
+class CatalogBody(BaseModel):
+    enabled: bool
 
 
 def link_router(linker: Linker, *, prefix: str, local_access: Callable[[Request], bool],
@@ -95,5 +99,22 @@ def link_router(linker: Linker, *, prefix: str, local_access: Callable[[Request]
             raise HTTPException(422, f"level must be one of {LEVELS}")
         linker.store.set_visibility(body.level)
         return {**linker.state(), "manage": manage}
+
+    @router.post("/catalog")
+    def catalog(request: Request, body: CatalogBody):
+        """Share the catalog with the hub or stop sharing it (the next heartbeat tells the hub)."""
+        require_manage(request)
+        if not linker.catalog:
+            raise HTTPException(404, "this product has no catalog")
+        linker.store.set_catalog(body.enabled)
+        return {**linker.state(), "manage": manage}
+
+    @router.get("/catalog")
+    def catalog_preview(request: Request):
+        """Exactly what the hub would get, so the owner can check it."""
+        require_local(request)
+        if not linker.catalog:
+            raise HTTPException(404, "this product has no catalog")
+        return {"enabled": linker.store.instance.catalog, "items": clean_catalog(linker.catalog())}
 
     return router
